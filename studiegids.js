@@ -23,7 +23,6 @@ var OPLEIDING = Object.freeze({
 	BSC_EE : 11,
 	MSC_CE : 14,
 	MSC_EE : 16,
-	MSC_MKE :17,
 	HBO_SCHAKEL: 79,
 	MINORS_EWI:103,
 })
@@ -37,7 +36,7 @@ var studiegids = {
 	baseUrl		: "https://api.tudelft.nl/v0/opleidingen/",
 	debug		: true,
 	rawData		: {},
-	opleiding   : OPLEIDING.BSC_TI,
+	opleiding   : OPLEIDING.MINORS_EWI,
 	courseData 	: new CourseData(),
 
 	fetch: function(callback){
@@ -87,7 +86,7 @@ var studiegids = {
 		else {
 			for (var i = 0; i < studieprogrammas.length; i++){
 				var studieprogramma = studieprogrammas[i];
-				this.parseStudieProgramma(studieprogramma, name, depth);
+				this.parseStudieProgramma(studieprogramma, opleidingnaam, depth);
 			}
 		}
 	},
@@ -111,7 +110,7 @@ var studiegids = {
 		// If there is a nested studieprogrammaboom
 		// Parse it!
 		if(studieprogramma.studieprogrammaboom){
-			this.parseStudieProgrammas(studieprogramma.studieprogrammaboom.studieprogramma, name, depth+1); // Er kunnen studieprogrammas in studieprogramma's zitten :')
+			this.parseStudieProgrammas(studieprogramma.studieprogrammaboom.studieprogramma, name, depth); // Er kunnen studieprogrammas in studieprogramma's zitten :')
 		}
 	},
 
@@ -133,7 +132,7 @@ var studiegids = {
 
 	},
 
-
+	
 }
 
 
@@ -145,7 +144,7 @@ var studiegids = {
 
 
 
-// // Nu gaan we alle vakken ophalen!
+// Nu gaan we alle vakken ophalen!
 
 // function getCourses(courses){
 // 	for(var i = 0; i < courses.length; i++){
