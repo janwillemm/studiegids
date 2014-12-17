@@ -1,0 +1,254 @@
+<!DOCTYPE HTML>
+<div id="sql"></div>
+<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js" ></script>
+
+<script type="text/javascript">
+
+
+function fetchData(){
+	
+	$.ajax({
+	  dataType: "jsonp",
+	  url: "https://api.tudelft.nl/v0/opleidingen/EWI?studiejaarid=11",
+	  success: parseOpleidingen
+	});
+}
+
+if (typeof String.prototype.startsWith != 'function') {
+  String.prototype.startsWith = function (str){
+    return this.slice(0, str.length) == str;
+  };
+}
+
+// Defining the datastructure models to be filled for easy Mysql import
+var courses = [];
+function Course() {
+	this.id;
+	this.code;
+	this.name;
+
+	this.equals = function(other){
+		return this.name == other.name;
+	}
+}
+
+var programs = [];
+function Program(){
+	this.id;
+	this.name;
+
+	this.equals = function(other){
+		return this.name == other.name;
+	}
+}
+
+var program_courses = [];
+function Program_Course(){
+	this.program;
+	this.course;
+
+	this.equals = function(other){
+		return (other.program.equals(this.program) && other.course.equals(this.course))
+	}
+}
+
+fetchData();
+
+/* 
+	Some helpers
+*/
+
+// This one checks if the element already exists in the array and adds it if its unique
+function addUniqueToArray(element, array){
+	var exists = false;
+
+	for(var i = 0; i < array.length; i++){
+		if(element.equals(array[i])){
+			return array[i];
+		}
+	}	
+	array.push(element);
+	return element;
+}
+
+// We don't want to add all courses, just our own courses
+function checkCourse(vak){
+
+	return ( 
+		vak.kortenaamNL.startsWith("TI") || 
+		vak.kortenaamNL.startsWith("WI") ||
+		vak.kortenaamNL.startsWith("IN") ||
+		vak.kortenaamNL.startsWith("TW") 
+		);
+}
+
+// Give every element an id in the array
+function giveID(element, index){
+	element.id = index+1;
+	return element;
+}
+
+function parseOpleidingen(data){
+	var opleidingen = data.getOpleidingenByFacultyAndYearResponse.opleiding;
+	console.log(data);
+	for(var i = 0; i < opleidingen.length; i++){
+		var opleiding = opleidingen[i];
+		console.log("Starting to parse:" + opleiding.naamNL + ", " + opleiding.id);
+
+		var depth = 0;
+		// Een opleiding kan dus ook geen studieprogramma hebben :')
+		if(opleiding.studieprogrammaboom) {
+			switch(parseInt(opleiding.id)){
+				//case 76: // MSC_ES
+				//case 13: // MSC_AM
+				//	depth = 1;
+
+				case 12: // BSC_TI
+				//case 15: // MSC_CS
+				//case 28: // BSC_TW
+					parseStudieprogrammas(opleiding.studieprogrammaboom.studieprogramma, opleiding.id + ", ", depth);
+					break;	
+
+				case 11: // BSC_EE
+				case 14: // MSC_CE
+				case 16: // MSC_EE
+				case 17: // MSC_MKE
+
+				case 79: // HBO_SCHAKEL
+				case 103: // MINORS_EWI
+				default:
+					break;
+			}
+		}
+	}
+	getCourses(courses);
+}
+
+// Starting the real script!
+
+
+
+// We should first parse the studieprograms
+// It can be an array or just a single object, so a difference is made
+function parseStudieprogrammas(studieprogrammas, name, depth){
+	if(!Array.isArray(studieprogrammas)){
+		parseStudieprogramma(studieprogrammas, name, depth);
+		return;
+	}
+
+	for (var i = 0; i < studieprogrammas.length; i++){
+		var studieprogramma = studieprogrammas[i];
+		parseStudieprogramma(studieprogramma, name, depth);
+	}
+
+}
+
+// Each studieprogramma can have courses AND 
+// can have more embedded studieprogrammas
+// So we should take care of both situations
+function parseStudieprogramma(studieprogramma, name, depth){
+	if(depth < 2)
+		name = name + " " + studieprogramma.programmacode;
+	console.log("Starting to parse:     programm: " + name);
+
+	if(studieprogramma.vak){
+		// Maak het programma aan.
+		var program = new Program();
+		program.name = name;
+		program = addUniqueToArray(program, programs); // En stop dit in de datastructuur
+		
+		parseVakken(studieprogramma.vak, program);
+	}
+	if(studieprogramma.studieprogrammaboom){
+		parseStudieprogrammas(studieprogramma.studieprogrammaboom.studieprogramma, name, depth+1); // Er kunnen studieprogrammas in studieprogramma's zitten :')
+	}
+}
+
+// I didn't come by any studieprogramma
+// that did just have one course.
+// TODO: if needed, add support for one course! 
+function parseVakken(vakken, program){
+	for (var j = 0; j < vakken.length; j++){
+		var vak = vakken[j];
+		parseVak(vak, program)
+		
+	}
+}
+
+// Parses the course and adds the teachers which will be nominated
+// Nominated is a strange name for a teacher, all teachers are also
+// nominated..
+function parseVak(vak, program){
+	console.log("Starting to parse:          course: " + vak.kortenaamNL);
+	if(!checkCourse(vak))
+		return;
+
+	var course = new Course();
+	course.code = vak.kortenaamNL;
+	course.name = vak.langenaamEN;
+	course = addUniqueToArray(course, courses);
+
+	var program_course = new Program_Course();
+	program_course.program = program;
+	program_course.course = course;
+	addUniqueToArray(program_course, program_courses);
+	
+	// A course can have zero teachers!!!! :')
+
+}
+
+
+// Nu gaan we alle vakken ophalen!
+
+function getCourses(courses){
+	for(var i = 0; i < courses.length; i++){
+		course = courses[i];
+		fetchCourse(course.code);
+	}
+}
+
+function fetchCourse(courseID){
+	$.ajax({
+	  dataType: "jsonp",
+	  url: "https://api.tudelft.nl/v0/vakken/"+courseID+"?studiejaarid=11",
+	  success: parseCourse
+	});
+
+}
+
+function parseCourse(data){
+	console.log(data);
+	var velden = data.vak.extraUnsupportedInfo.vakUnsupportedInfoVelden
+	var test = false;
+	console.log(data.vak)
+	for(var i = 0; i < velden.length; i++){
+		veld = velden[i];
+		if(veld["@label"].toUpperCase() == "JUDGEMENT" || veld["@label"].toUpperCase() == "BEOORDELING" || veld["@label"].toUpperCase() == "ASSESSMENT" || veld["@label"].toUpperCase() == "WIJZE VAN TOETSEN"){
+			appendLine("<br /><b>" + data.vak.cursusid + "</b> " + data.vak.kortenaamNL +"(" + veld["@label"] + ") -->" + veld.inhoud + "<br /><hr>");
+			test = true;
+		}
+
+	}
+	if(!test){
+		appendLine("<hr><hr><hr>" + data.vak.cursusid + " !!!!!!! Dit vak heeft geen beschrijving!<hr><hr><hr>");
+	}
+}
+
+
+// Now show the data so that it can be easely imported!
+var div = document.getElementById('sql');
+
+
+function appendLine(line){
+	div.innerHTML = div.innerHTML + "<br />" + line;
+}
+
+String.prototype.addSlashes = function() 
+{ 
+   //no need to do (str+'') anymore because 'this' can only be a string
+   return this.replace(/[\\"']/g, '\\$&').replace(/\u0000/g, '\\0');
+} 
+
+
+
+</script>
