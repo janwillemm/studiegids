@@ -38,6 +38,9 @@ var studiegids = {
 	rawData		: {},
 	opleiding   : OPLEIDING.MINORS_EWI,
 	courseData 	: new CourseData(),
+	coursesFetched : 0,
+	fields 		: [],
+
 
 	fetch: function(callback){
 		var url = this.baseUrl + this.faculty + "?studiejaarid=" + this.year; 
@@ -69,11 +72,11 @@ var studiegids = {
 
 	parseOpleiding : function(opleiding){
 			if(opleiding.studieprogrammaboom){
-				if(parseInt(opleiding.id) == this.opleiding ){
+				//if(parseInt(opleiding.id) == this.opleiding ){
 					console.log("Starting to parse:" + opleiding.id + ": " + opleiding.naamNL);
 					depth = 0;
 					this.parseStudieProgrammas(opleiding.studieprogrammaboom.studieprogramma, opleiding.code, depth);
-				}
+				//}
 			}		
 	},
 
@@ -122,60 +125,77 @@ var studiegids = {
 		}
 	},
 
+	// Parses just one course.
 	parseVak : function(vak, program){
 		console.log("Starting to parse:          course: " + vak.kortenaamNL);
 
 		var course = new Course();
 		course.code = vak.kortenaamNL;
 		course.name = vak.langenaamEN;
+		course.ects = vak.ects;
 		this.courseData.addCourse(course, program);
 
 	},
 
-	
+	// Fetched detailed information about a course
+	fetchDetailedCourse : function(course){
+		var $this = this;
+		$.ajax({
+		  dataType: "jsonp",
+		  url: "https://api.tudelft.nl/v0/vakken/"+course.code+"?studiejaarid=11",
+		  success: function(data){
+		  	course.addRawData(data);
+		  	$this.coursesFetched++;
+		  	if($this.coursesFetched == $this.courseData.numCourses){
+		  		$this.fetchedAllCourses();
+		  	}
+		  },
+		  error: function(){
+		  	console.log(course);
+		  	$this.errorFetchingCourse(course);
+		  }
+		  
+		});
+	},
+
+	fetchedAllCourses : function(){
+		var csvContent = "data:text/csv;charset=utf-8,";
+
+		// Create the header
+		for(var i = 0; i < this.fields.length - 1; i++){
+			csvContent += this.fields[i] + ",";
+		}
+		csvContent += this.fields[this.fields.length-1] + "\n";
+
+		// Generate the content
+		for(var key in this.courseData.courses){
+			var course = this.courseData.courses[key];
+			csvContent += course.createCSVRow(this.fields) + "\n";
+		}
+		var encodedUri = encodeURI(csvContent);
+		window.open(encodedUri);
+	},
+
+	errorFetchingCourse : function(course){
+		console.log("error loading course", course.code);
+		this.courseData.numCourses;
+	}
 }
 
+function parseCourse(data){
+	console.log(data);
+	var velden = data.vak.extraUnsupportedInfo.vakUnsupportedInfoVelden
+	var test = false;
+	console.log(data.vak)
+	for(var i = 0; i < velden.length; i++){
+		veld = velden[i];
+		if(veld["@label"].toUpperCase() == "JUDGEMENT" || veld["@label"].toUpperCase() == "BEOORDELING" || veld["@label"].toUpperCase() == "ASSESSMENT" || veld["@label"].toUpperCase() == "WIJZE VAN TOETSEN"){
+			appendLine("<br /><b>" + data.vak.cursusid + "</b> " + data.vak.kortenaamNL +"(" + veld["@label"] + ") -->" + veld.inhoud + "<br /><hr>");
+			test = true;
+		}
 
-/* 
-	Some helpers
-*/
-
-
-
-
-
-// Nu gaan we alle vakken ophalen!
-
-// function getCourses(courses){
-// 	for(var i = 0; i < courses.length; i++){
-// 		course = courses[i];
-// 		fetchCourse(course.code);
-// 	}
-// }
-
-// function fetchCourse(courseID){
-// 	$.ajax({
-// 	  dataType: "jsonp",
-// 	  url: "https://api.tudelft.nl/v0/vakken/"+courseID+"?studiejaarid=11",
-// 	  success: parseCourse
-// 	});
-
-// }
-
-// function parseCourse(data){
-// 	console.log(data);
-// 	var velden = data.vak.extraUnsupportedInfo.vakUnsupportedInfoVelden
-// 	var test = false;
-// 	console.log(data.vak)
-// 	for(var i = 0; i < velden.length; i++){
-// 		veld = velden[i];
-// 		if(veld["@label"].toUpperCase() == "JUDGEMENT" || veld["@label"].toUpperCase() == "BEOORDELING" || veld["@label"].toUpperCase() == "ASSESSMENT" || veld["@label"].toUpperCase() == "WIJZE VAN TOETSEN"){
-// 			appendLine("<br /><b>" + data.vak.cursusid + "</b> " + data.vak.kortenaamNL +"(" + veld["@label"] + ") -->" + veld.inhoud + "<br /><hr>");
-// 			test = true;
-// 		}
-
-// 	}
-// 	if(!test){
-// 		appendLine("<hr><hr><hr>" + data.vak.cursusid + " !!!!!!! Dit vak heeft geen beschrijving!<hr><hr><hr>");
-// 	}
-// }
+	}
+	if(!test){
+		appendLine("<hr><hr><hr>" + data.vak.cursusid + " !!!!!!! Dit vak heeft geen beschrijving!<hr><hr><hr>");
+	}
+}

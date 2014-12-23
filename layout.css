@@ -1,0 +1,21 @@
+div.fields-container div.field span {
+	width: 150px;
+	display:inline-block;
+	margin-left:10px;
+}
+
+div.fields-container div.field.header span, div.fields-container div.field.header label{
+	font-weight: bold;
+}
+
+div.fields-container div.field.header {
+	border-bottom: 1px solid grey
+}
+
+div.fields-container {
+	width:300px;
+}
+
+div.fields-container div.field span:first-letter {
+	text-transform: capitalize;
+}
