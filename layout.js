@@ -1,8 +1,8 @@
-
 var Form = function(){
 	this.myHTML;
 	this.facultyInput;
 	this.fieldInputs;
+	this.opleidingInputs;
 
 	this.getHTML = function(){
 		if(!this.myHTML){
@@ -19,33 +19,38 @@ var Form = function(){
 				$this.submit();
 			})
 
-			this.myHTML = form.append(facultyInput.getHTML()).append(fieldInputs.getHTML()).append(button);
+			var opleidingInputs = new OpleidingInputs();
+			this.opleidingInputs = opleidingInputs;
+
+			this.myHTML = form.append(facultyInput.getHTML()).append(opleidingInputs.getHTML()).append(fieldInputs.getHTML()).append(button);
 
 		}
 		return this.myHTML;
 	}
 
 	this.submit = function(){
-		console.log(this.facultyInput.getValue());
-		
 		var chosenLabels = [];
 		var fields = this.fieldInputs.fields;
 		for(var i = 0; i < fields.length; i++){
 			var field = fields[i];
 			var langs = field.enabledLanguages();
 			for(var j = 0; j < langs.length; j++){
-				console.log(extraCourseLabels[field.id]);
 				chosenLabels.push(extraCourseLabels[field.id][langs[j]]);
 			}
 		}
 
-		studiegids.useData(EWIDATARESPONSE);
-		studiegids.faculty = this.facultyInput.getValue();
-		// Set studiegids opleiding TODO
-		studiegids.fields = chosenLabels;
-		studiegids.parse();
+		var fields = this.opleidingInputs.fields;
+		var chosenOpleidingen = [];
+		for(var i = 0; i < fields.length; i++){
+			var field = fields[i];
+			if(field.isSelected()){
+				chosenOpleidingen.push(field);
+			}
+		}
 
+		StudyGuideDownloader.startFetching(this.facultyInput.getValue(), chosenOpleidingen, chosenLabels);
 	}
+
 }
 
 var FacultyInput = function(faculties){
@@ -124,6 +129,58 @@ var FieldInputs = function(){
 	}
 }
 
+// MSC_ES : 76,
+// MSC_AM : 13,
+// BSC_TI : 12,
+// MSC_CS : 15,
+// BSC_TW : 28,
+// BSC_EE : 11,
+// MSC_CE : 14,
+// MSC_EE : 16,
+// HBO_SCHAKEL: 79,
+// MINORS_EWI:103,
+
+var OpleidingInputs = function(){
+	this.myHTML;
+	this.fields = [];
+
+	this.getHTML = function(){
+		if(!this.myHTML){
+			var div = $("<div>").addClass("fields-container");
+			this.myHTML = div;
+
+			for(key in OPLEIDING){
+				var fieldInput = new OpleidingInput(key, OPLEIDING[key]);
+				this.fields.push(fieldInput);
+				this.myHTML.append(fieldInput.getHTML());
+			}
+
+		}
+
+		return this.myHTML;
+	}
+}
+
+var OpleidingInput = function(name, id){
+	this.name = name;
+	this.id = id;
+
+	this.myHTML;
+	this.checkbox;
+
+	this.getHTML = function(){
+		if(!this.myHTML){
+			var div = $("<div>").attr({"label-id":this.id}).addClass("form-group field");
+			this.checkbox = new inlineLabelCheckbox(this.name);
+			this.myHTML = div.append(this.checkbox.getHTML());
+		}
+		return this.myHTML;
+	}
+
+	this.isSelected = function(){
+		return this.checkbox.isChecked();
+	}
+}
 
 var FieldInput = function(name, id){
 
@@ -208,5 +265,146 @@ var inlineLabelCheckbox = function(text){
 		else{
 			this.getHTML().children("input[type='checkbox']").prop('checked', false);	
 		}
+	}
+}
+
+
+
+var Spinner = function(){
+	this.myHTML;
+
+	this.getHTML = function(){
+		if(!this.myHTML){
+			this.myHTML = $('<div>').addClass("center spinner").hide();
+		}
+		return this.myHTML;
+	}
+
+	this.stop = function(){
+		this.getHTML().remove();
+		this.myHTML = undefined;
+	}
+
+	this.start = function(){
+		this.getHTML().show();
+	}	
+}
+
+
+var ProgramList = function(){
+	this.myHTML;
+	this.csvDatas = [];
+	this.downloadButton;
+	this.select;
+
+	this.getHTML = function(){
+		if(!this.myHTML){
+			var div = $("<div>").addClass("program-list");
+			var select = $("<select>").addClass("form-control programList");
+			var $this = this;
+			select.change(function(){
+				var option = $this.select.find(":selected");
+				var number = option.val();
+				if(number > -1){
+					$this.downloadButton.data = $this.csvDatas[number];
+					$this.downloadButton.filename = option.text();
+					$this.downloadButton.label = option.text();
+					$this.downloadButton.show();
+				}
+				else {
+					$this.downloadButton.hide();
+				}
+				
+			});
+			this.select = select;
+
+			var emptyOption = $("<option>").attr({value: "-1"}).text("Kies de download");
+			select.append(emptyOption);
+
+			var downloadButton = new DownloadButton("", "", "Download!");
+			downloadButton.hide();
+			this.downloadButton = downloadButton;
+			this.myHTML = div.append(select).append(downloadButton.getHTML());
+		}
+		return this.myHTML;
+	}
+
+	this.addProgram = function(name, csvData){
+		var position = this.csvDatas.length;
+		this.csvDatas[position] = csvData;
+		if(name.length > 50){
+			name = "..." + name.substr(name.length - 50);
+		}
+		var option = $("<option>").attr({value: position}).text(name);
+		this.select.append(option);
+	}
+
+
+}
+
+var DownloadButton = function(data, filename, label){
+	this.myHTML;
+	this.data = data;
+	this.filename = filename;
+	this.label = label;
+
+	//<button type="button" class="btn btn-success">Success</button>
+	this.getHTML = function(){
+		if(!this.myHTML){
+			var button = $("<button>").addClass("btn btn-success downloadButton").text(this.label);
+			var div = $("<div>").addClass("downloadButton").append(button);
+			var $this = this;
+			button.click(function(){
+				$this.onClick();
+			})
+			this.myHTML = div;
+		}
+		return this.myHTML;
+	}
+
+	this.onClick = function(){
+		var blob = new Blob([this.data], { type: 'text/csv;charset=utf-8;' });
+        if (navigator.msSaveBlob) { // IE 10+
+            navigator.msSaveBlob(blob, this.filename);
+        } else {
+            var link = document.createElement("a");
+            if (link.download !== undefined) { // feature detection
+                // Browsers that support HTML5 download attribute
+                var url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", this.filename);
+                link.style = "visibility:hidden";
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+            else {
+            	var encodedUri = encodeURI(csvContent);
+				window.open(encodedUri);
+            }
+        }
+	}
+
+	this.hide = function(){
+		this.getHTML().hide();
+	}
+
+	this.show = function(){
+		this.getHTML().show();
+	}
+}
+
+var RefreshButton = function(){
+	this.myHTML;
+
+	this.getHTML = function(){
+		if(!this.myHTML){
+			var html = $("<button>").addClass("btn btn-warning").text("Refresh").click(function(){
+				location.reload();
+			});
+			this.myHTML = $("<div>").append(html);
+		}
+
+		return this.myHTML;
 	}
 }

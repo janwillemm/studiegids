@@ -36,47 +36,61 @@ var studiegids = {
 	baseUrl		: "https://api.tudelft.nl/v0/opleidingen/",
 	debug		: true,
 	rawData		: {},
-	opleiding   : OPLEIDING.MINORS_EWI,
+	opleidingen : [],
 	courseData 	: new CourseData(),
-	coursesFetched : 0,
+	coursesFetched 	: 0,
+	coursesError 	: 0,
 	fields 		: [],
 
 
+	// Fetches the studiegids for the cafulty and the year
 	fetch: function(callback){
 		var url = this.baseUrl + this.faculty + "?studiejaarid=" + this.year; 
 		var $this = this;
 		$.ajax({
 			dataType: "jsonp",
 			url: url,
-			error: function(jqXHR, textStatus, errorThrown){console.log("Error for url:" + url); console.log(textStatus + "\r\n" + errorThrown)},
+			error: function(jqXHR, textStatus, errorThrown){Logger.debug("Error for url:" + url); Logger.debug(textStatus + "\r\n" + errorThrown)},
 			success: function(data){ $this.rawData = data;}
 		});		
 	},
 
+	// Sets the data this object can use instead of the fetch function
 	useData: function(data){
 		this.rawData = data;
 	},
 
+	// Parses all.
 	parse: function(){
 		this.parseOpleidingen();
 	},
 
+	// Starts with parsing all the opleidingen.
 	parseOpleidingen : function(){
 		var opleidingen = this.rawData.getOpleidingenByFacultyAndYearResponse.opleiding;
 
 		for(var i = 0; i < opleidingen.length; i++){
 			this.parseOpleiding(opleidingen[i]);
 		}
-		//getCourses(courses);
 	},
 
+	// Parses each opleiding. Also checks if the opleiding is wanted.
 	parseOpleiding : function(opleiding){
 			if(opleiding.studieprogrammaboom){
-				//if(parseInt(opleiding.id) == this.opleiding ){
-					console.log("Starting to parse:" + opleiding.id + ": " + opleiding.naamNL);
+				var bool = false;
+				for(var i = 0; i < this.opleidingen.length; i++){
+					var curOpleid = this.opleidingen[i];
+					if(parseInt(curOpleid.id) == parseInt(opleiding.id)){
+						bool = true;
+						break;
+					}
+				}
+
+				if(bool){
+					Logger.debug("Starting to parse:" + opleiding.id + ": " + opleiding.naamNL);
 					depth = 0;
 					this.parseStudieProgrammas(opleiding.studieprogrammaboom.studieprogramma, opleiding.code, depth);
-				//}
+				}
 			}		
 	},
 
@@ -93,13 +107,14 @@ var studiegids = {
 			}
 		}
 	},
+
 	// Each studieprogramma can have courses AND 
 	// can have more embedded studieprogrammas
 	// So we should take care of both situations
 	parseStudieProgramma : function(studieprogramma, name, depth){
 		if(depth < 2)
 			name = name + " " + studieprogramma.programmacode;
-		console.log("Starting to parse:     programm: " + name);
+		Logger.debug("Starting to parse:     programm: " + name);
 
 		// Als het studieprogramma vakken heeft, voeg deze vakken toe aan het programma
 		if(studieprogramma.vak){
@@ -127,7 +142,7 @@ var studiegids = {
 
 	// Parses just one course.
 	parseVak : function(vak, program){
-		console.log("Starting to parse:          course: " + vak.kortenaamNL);
+		Logger.debug("Starting to parse:          course: " + vak.kortenaamNL);
 
 		var course = new Course();
 		course.code = vak.kortenaamNL;
@@ -140,53 +155,43 @@ var studiegids = {
 	// Fetched detailed information about a course
 	fetchDetailedCourse : function(course){
 		var $this = this;
-		$.ajax({
-		  dataType: "jsonp",
-		  url: "https://api.tudelft.nl/v0/vakken/"+course.code+"?studiejaarid=11",
-		  success: function(data){
-		  	course.addRawData(data);
-		  	$this.coursesFetched++;
-		  	if($this.coursesFetched == $this.courseData.numCourses){
-		  		$this.fetchedAllCourses();
-		  	}
-		  },
-		  error: function(){
-		  	console.log(course);
-		  	$this.errorFetchingCourse(course);
-		  }
-		  
+		$.jsonp({
+			url: "https://api.tudelft.nl/v0/vakken/"+course.code+"?studiejaarid=11&callback=?",
+			success: function(data){
+			  	Logger.info($this.coursesFetched + " - " + $this.coursesError + " - " + $this.courseData.numCourses + " - " + " - Fetched course: " + course.code);
+			  	course.addRawData(data);
+			  	$this.coursesFetched++;
+			  	if($this.coursesFetched+$this.coursesError == $this.courseData.numCourses){
+			  		$this.fetchedAllCourses();
+			  	}
+			},
+			error: function(xOptions, textStatus){
+				$this.errorFetchingCourse(textStatus, course);
+			}
 		});
 	},
 
 	fetchedAllCourses : function(){
-		var csvContent = "data:text/csv;charset=utf-8,";
-
-		// Create the header
-		for(var i = 0; i < this.fields.length - 1; i++){
-			csvContent += this.fields[i] + ",";
-		}
-		csvContent += this.fields[this.fields.length-1] + "\n";
-
-		// Generate the content
-		for(var key in this.courseData.courses){
-			var course = this.courseData.courses[key];
-			csvContent += course.createCSVRow(this.fields) + "\n";
-		}
-		var encodedUri = encodeURI(csvContent);
-		window.open(encodedUri);
+		StudyGuideDownloader.csvData(this.courseData, this.fields);
 	},
 
-	errorFetchingCourse : function(course){
-		console.log("error loading course", course.code);
-		this.courseData.numCourses;
+	errorFetchingCourse : function(status, course){
+		Logger.info("==== Warning! ====");
+		Logger.info("Error loading course: " + course.code);
+		if(status && status != ""){
+			Logger.info("Fout bericht: " + status);
+		}
+		Logger.info("==== ======== ====");
+		this.coursesError++;
+		this.courseData.addErrorCourse(course);
 	}
 }
 
 function parseCourse(data){
-	console.log(data);
+	Logger.debug(data);
 	var velden = data.vak.extraUnsupportedInfo.vakUnsupportedInfoVelden
 	var test = false;
-	console.log(data.vak)
+	Logger.debug(data.vak)
 	for(var i = 0; i < velden.length; i++){
 		veld = velden[i];
 		if(veld["@label"].toUpperCase() == "JUDGEMENT" || veld["@label"].toUpperCase() == "BEOORDELING" || veld["@label"].toUpperCase() == "ASSESSMENT" || veld["@label"].toUpperCase() == "WIJZE VAN TOETSEN"){

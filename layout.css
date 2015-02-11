@@ -1,7 +1,10 @@
+body, html {
+	height: 100%;
+}
 div.fields-container div.field span {
 	width: 150px;
 	display:inline-block;
-	margin-left:10px;
+	
 }
 
 div.fields-container div.field.header span, div.fields-container div.field.header label{
@@ -14,8 +17,56 @@ div.fields-container div.field.header {
 
 div.fields-container {
 	width:300px;
+	float:left;
 }
 
 div.fields-container div.field span:first-letter {
 	text-transform: capitalize;
+}
+
+label.checkbox-inline {
+	height:20px;
+}
+
+div.form-group.field {
+	margin-left:10px;
+}
+
+.logger{
+	width: 500px;
+	max-height:100%;
+	overflow: scroll;
+	margin:10px;
+	padding:3px;
+	border:inset 2px;
+	float:left;
+}
+
+.center {
+    position:absolute;
+    left:0;
+    right:0;
+    bottom:0;
+    top:0;
+    margin:auto;
+    background-image:url("ajax-loader.gif");
+}
+
+.spinner {
+	width:32px;
+    height:32px;
+}
+
+.downloadButton {
+	margin:1px;
+	position:relative;
+    height:32px;
+}
+
+div.program-list{
+	float:left;
+	margin-top:100px;
+}
+.programList{
+	width:200px;
 }

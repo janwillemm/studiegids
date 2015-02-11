@@ -55,7 +55,7 @@ var extraCourseLabelsTeacher = {
 		en : "Responsible Instructor"
 	},
 	docent : {
-		nl : "Docent",
+		nl : ["Docent", ],
 		en : "Instructor"
 	}
 }
@@ -78,63 +78,36 @@ function Course() {
 	}
 
 	this.addRawData = function(rawData){
-		this.courseInformation = new CourseInformation(rawData);
-		//console.log(this.createCSVRow());
+		// Some courses have NO information!
+		if(rawData){
+			if(rawData.vak.extraUnsupportedInfo){
+				this.courseInformation = new CourseInformation(rawData);
+			}
+		}
+		//Logger.debug(this.createCSVRow());
 		//this.courseInformation.printExtraCourseData("nl", $("body"));
 	}
 
-	this.createCSVRow = function(fields){
-		var result = "";
-		result = this.code
-			+ this.CSVElement(this.name) 
-			+ this.CSVElement(this.programs[0].name) 
-			+ this.CSVElement(this.ects);
-		if(this.courseInformation){
-		result += 
-			this.CSVElement(this.getTeacherInfo(extraCourseLabelsTeacher.hoofdDocent.nl)) 
-			+ this.CSVElement(this.getTeacherInfo(extraCourseLabelsTeacher.docent.nl));
-		}
-		for(var i = 0; i < fields.length; i++){
-			result += this.CSVElement(this.getLabelInfo(fields[i]));
-		}
-		return result;
-
-	}
-
-	this.CSVElement = function(element){
-		var seperator = ",";
-		return seperator + element;
-	}
 
 	this.getTeacherInfo = function(label){
-		return this.clean(this.courseInformation.findLabelInTeachers(label));
+		if(Array.isArray(label)){
+			var teachers = "";
+			for(var idx = 0; idx < label.length; idx++){
+				if(idx > 0){
+					teachers += ",";
+				}
+				teachers += this.courseInformation.findLabelInTeachers(label[idx]);
+			}
+			return teachers;
+		}
+		else {
+			return this.courseInformation.findLabelInTeachers(label);
+		}
+		
 	}
 
 	this.getLabelInfo = function(label){
-		return this.clean(this.courseInformation.findLabelInInfoFields(label));
-	}
-
-	this.clean = function(string){
-		if(string == undefined)
-			return "";
-		var cleanString = string;
-		if(Array.isArray(string)){
-			cleanString = "";
-			for(index in string){
-				cleanString += string[index];
-			}
-		}
-		
-		// Encode the quotes so they won't collide with csv
-		cleanString = cleanString.replace(/\"/g, "&quot;"); 
-
-		// Remove all newlines
-		cleanString = cleanString.replace(/\r?\n|\r/g, " ");
-
-		// Add quotes to string
-		cleanString = "\"" + cleanString + "\"";
-
-		return cleanString;
+		return this.courseInformation.findLabelInInfoFields(label);
 	}
 }
 
@@ -229,27 +202,27 @@ function CourseData(){
 	this.numCourses = 0;
 	this.programs = {};
 	this.numPrograms = 0;
-	this.program_courses = [];
+	this.errorCourses = [];
 
 	this.addCourse = function(course, program){
 		if(!this.courses[course.code]){
 			this.courses[course.code] = course;
-			
-			studiegids.fetchDetailedCourse(course);	
-
+			studiegids.fetchDetailedCourse(course);
 			this.numCourses++;	
 		}
 		this.courses[course.code].addProgram(program);
-		
 		this.addProgram(program).addCourse(course);
+	}
 
-		
-		
+	this.addErrorCourse = function(course){
+		this.errorCourses.push(course);
 	}
 
 	this.addProgram = function(program){
 		var curProgram = this.programs[program.name];
+		console.log(curProgram);
 		if(!curProgram){
+			console.log(curProgram);
 			this.programs[program.name] = program;
 			curProgram = this.programs[program.name];
 			this.numPrograms++;
